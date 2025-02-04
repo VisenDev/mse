@@ -1,69 +1,156 @@
+# utilities
+set indent-level 0
+proc indent {} {
+    global indent-level
+    incr indent-level
+}
+
+proc unindent {} {
+    global indent-level
+    incr indent-level -1
+}
+proc indentation {} {
+    global indent-level
+    for {set i 0} {$i < ${indent-level}} {incr i} {
+        puts -nonewline "    "
+    }
+}
 proc out {str} {
     puts -nonewline $str
 }
 
-proc c-include {file} {
-    puts "#include $file"
+
+proc stack {stk} {
+    uplevel 1 "set $stk {}"
 }
 
-proc c-uint {name} {
-    out "unsigned int"
-}
-proc c-int {name} 
-    out "int"
-}
-proc c-bool {name} {
-    out "int"
-}
-proc c-float {name} {
-    out "float"
+proc push {stk args} {
+    uplevel 1 "lappend $stk $args"
 }
 
-proc c-decl {args} {
+proc pop {name} {
+    upvar $name stk 
+    set tmp [lindex $stk end]
+    set stk [lreplace $stk end end]
+    set tmp
 }
 
-proc c-body {args} {
-    foreach arg $args {
-        puts $arg
-    }
+# unknown
+proc unknown {cmd args} {
+    indentation
+    c-fncall $cmd {*}$args
 }
 
-proc c-fn {ret name arguments body} {
-    puts -nonewline "$ret $name ("
+
+# c constructs
+proc c-fncall {name args} {
+    out "${name}("
     set comma 0
-    foreach arg $arguments {
+    foreach arg $args {
         if {$comma == 1} {
-            puts -nonewline ", "
+           out ", "
         }
         set comma 1
         puts -nonewline $arg
     }
-    puts ") {"
-    eval c-body $body
-    puts "}"
+    out ");\n"
 }
 
-proc c-main {args} {
-    c-include <stdio.h>
-    c-include <stdlib.h>
-    puts ""
-    puts "int main(void) {"
-    foreach arg $args {
-        puts -nonewline "    "
+proc c-include {file} {
+    out "#include $file\n"
+}
+
+proc c-fn-args {fn-args} {
+    set arglist [split ${fn-args} ","]
+    set comma 0
+    out "("
+    foreach arg $arglist {
+        if {$comma == 1} {
+            out ", "
+        }
+        set comma 1
         eval $arg
     }
-    puts "    return 0;"
-    puts "}"
+    out ")"
 }
 
-proc c-print {str} {
-    puts "printf(\"%s\", \"$str\");"
+proc c-fn {ret name args body} {
+    out "$ret $name"
+    c-fn-args $args
+    c-block $body
+
 }
 
-c-fn int test {{int a} {char b} {bool c}} {
-    hi
+proc c-int {name args} {
+    if {[lindex $args 0] == "="} {
+        indentation
+        out "int $name ${args};\n"
+    } elseif {[llength $args] == 2} {
+        indentation
+        c-fn int $name [lindex $args 0] [lindex $args 1]
+    } else {
+        indentation
+        out "int $name"
+    }
 }
 
-c-main {
-    c-print "hello"
+proc c-defer {statement} {
+    upvar defers defers
+    push defers $statement
 }
+
+proc c-block {body} {
+    stack defers 
+
+    indentation
+    out "{\n"
+    indent
+    uplevel 0 $body
+
+    foreach deferred $defers {
+        eval $deferred
+    }
+
+    unindent
+    indentation
+    out "}\n"
+}
+
+proc c-if {condition body} {
+    out "if("
+    out $condition
+    out ")"
+    c-block $body
+}
+
+proc c-return {value} {
+    out "return $value;"
+}
+
+# test code
+
+c-include <stdio.h>
+c-include <stdlib.h>
+
+c-int sayhello {c-int times} {
+    c-if {times < 0} {
+        c-return 0
+    }
+    printf {"hello"}
+    sayhello {times - 1}
+    c-return 0
+}
+
+c-int main {c-int a, c-int b} {
+    c-int hi = 1
+    printf {"hey\n"}
+    sayhello 5
+
+    c-defer {printf "\"final-hi\\n\""}
+
+    c-block {
+        c-defer {printf "\"deferred-hi\\n\""}
+        printf "\"world\""
+    }
+}
+
