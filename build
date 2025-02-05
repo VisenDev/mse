@@ -5,10 +5,50 @@ set cfile "$builddir/out.c"
 set exe "$builddir/out"
 set src ccode.tcl
 
-file mkdir $builddir
-set csrc [exec tclsh $src]
-set fd [open $cfile "w"]
-puts $fd $csrc
-close $fd
-exec cc $cfile -o $exe
-puts [exec $exe]
+proc codegen {} {
+    global builddir src cfile
+    file mkdir $builddir
+    set csrc [exec tclsh $src]
+    set fd [open $cfile "w"]
+    puts $fd $csrc
+    close $fd
+}
+
+proc compile {} {
+    codegen
+    global cfile exe
+    exec cc $cfile -o $exe
+}
+
+proc run {} {
+    compile
+    global exe
+    puts [exec $exe]
+}
+
+proc inspect {} {
+    global cfile
+    codegen
+    exec nvim $cfile <@stdin >@stdout 2>@stderr
+}
+
+proc handle-args {default options} {
+    global argc argv
+    set arg [lindex $argv 0]
+    if {$argc == 0} {
+        uplevel 0 $default
+    } elseif {$arg == "help" || $arg == "-h" || $arg == "--help"} {
+        puts "Valid cli arguments are one of \"$options\""
+        puts "If no argument is provided, \"$default\" will be chosen by default"
+    } else {
+        foreach option $options {
+            if {$arg == $option} {
+                uplevel 0 $option
+                return
+            }
+        }
+        puts "Invalid cli argument \"$arg\", expected one of \"$options\""
+    }
+}
+
+handle-args run {run compile inspect codegen}
