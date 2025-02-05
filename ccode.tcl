@@ -1,156 +1,209 @@
-# utilities
-set indent-level 0
-proc indent {} {
-    global indent-level
-    incr indent-level
-}
 
-proc unindent {} {
-    global indent-level
-    incr indent-level -1
-}
-proc indentation {} {
-    global indent-level
-    for {set i 0} {$i < ${indent-level}} {incr i} {
-        puts -nonewline "    "
+namespace eval cgen {
+    set indent-level 0
+    proc indent {} {
+        incr cgen::indent-level
+    }
+
+    proc unindent {} {
+        incr cgen::indent-level -1
+    }
+    proc indentation {} {
+        for {set i 0} {$i < ${cgen::indent-level}} {incr i} {
+            puts -nonewline "    "
+        }
+    }
+    proc out {str} {
+        puts -nonewline $str
+    }
+    proc iout {str} {
+        indentation
+        out $str
     }
 }
-proc out {str} {
-    puts -nonewline $str
-}
 
+namespace eval stack {
+    proc make {stk} {
+        uplevel 1 "set $stk {}"
+    }
 
-proc stack {stk} {
-    uplevel 1 "set $stk {}"
-}
+    proc push {stk args} {
+        uplevel 1 "lappend $stk $args"
+    }
 
-proc push {stk args} {
-    uplevel 1 "lappend $stk $args"
-}
-
-proc pop {name} {
-    upvar $name stk 
-    set tmp [lindex $stk end]
-    set stk [lreplace $stk end end]
-    set tmp
+    proc pop {name} {
+        upvar $name stk 
+        set tmp [lindex $stk end]
+        set stk [lreplace $stk end end]
+        set tmp
+    }
 }
 
 # unknown
-proc unknown {cmd args} {
-    indentation
-    c-fncall $cmd {*}$args
-}
+#proc unknown {cmd args} {
+#    c-fncall $cmd {*}$args
+#}
 
 
 # c constructs
-proc c-fncall {name args} {
-    out "${name}("
-    set comma 0
-    foreach arg $args {
-        if {$comma == 1} {
-           out ", "
+namespace eval c {
+    proc fncall {name args} {
+        cgen::out "${name}("
+        set comma 0
+        foreach arg $args {
+            ::if {$comma == 1} {
+               cgen::out ", "
+            }
+            set comma 1
+            cgen::out $arg
         }
-        set comma 1
-        puts -nonewline $arg
+        cgen::out ");\n"
     }
-    out ");\n"
-}
 
-proc c-include {file} {
-    out "#include $file\n"
-}
+    proc indent-fncall {name args} {
+        cgen::indentation
+        fncall $name {*}$args
 
-proc c-fn-args {fn-args} {
-    set arglist [split ${fn-args} ","]
-    set comma 0
-    out "("
-    foreach arg $arglist {
-        if {$comma == 1} {
-            out ", "
+    } 
+
+    proc while {condition body} {
+        cgen::indentation
+        cgen::out "while ($condition)" 
+        block $body
+    }
+
+    proc include {file} {
+        cgen::out "#include $file\n\n"
+    }
+
+    proc fn-args {fn-args} {
+        set arglist [split ${fn-args} ","]
+        set comma 0
+        cgen::out "("
+        foreach arg $arglist {
+            ::if {$comma == 1} {
+                cgen::out ", "
+            }
+            set comma 1
+            eval $arg
         }
-        set comma 1
-        eval $arg
-    }
-    out ")"
-}
-
-proc c-fn {ret name args body} {
-    out "$ret $name"
-    c-fn-args $args
-    c-block $body
-
-}
-
-proc c-int {name args} {
-    if {[lindex $args 0] == "="} {
-        indentation
-        out "int $name ${args};\n"
-    } elseif {[llength $args] == 2} {
-        indentation
-        c-fn int $name [lindex $args 0] [lindex $args 1]
-    } else {
-        indentation
-        out "int $name"
-    }
-}
-
-proc c-defer {statement} {
-    upvar defers defers
-    push defers $statement
-}
-
-proc c-block {body} {
-    stack defers 
-
-    indentation
-    out "{\n"
-    indent
-    uplevel 0 $body
-
-    foreach deferred $defers {
-        eval $deferred
+        cgen::out ")"
     }
 
-    unindent
-    indentation
-    out "}\n"
-}
+    proc fn {ret name args body} {
+        uplevel 0 "proc $name {args} {cgen::out \"$name\(\$args\);\\n\"}"
+        cgen::out "$ret $name"
+        fn-args $args
+        block $body
+    }
 
-proc c-if {condition body} {
-    out "if("
-    out $condition
-    out ")"
-    c-block $body
-}
+    proc def-type {typename} {
+        set template {
+            proc T {name args} {
+                ::if {[lindex $args 0] == "="} {
+                    cgen::iout "T $name ${args};\n"
+                } elseif {[llength $args] == 2} {
+                    cgen::out "\n"
+                    fn T $name [lindex $args 0] [lindex $args 1]
+                } else {
+                    cgen::iout "T $name"
+                }
+            }
+        }
+        uplevel 0 [string map "T $typename" $template]
+        uplevel 0 [string map "T $typename*" $template]
+        uplevel 0 [string map "T $typename**" $template]
+        uplevel 0 [string map "T $typename***" $template]
+        uplevel 0 [string map "T $typename****" $template]
+    }
 
-proc c-return {value} {
-    out "return $value;"
+    def-type int
+    def-type char 
+    def-type void 
+    def-type float
+    def-type long
+    def-type short
+
+    #proc int {name args} {
+    #    ::if {[lindex $args 0] == "="} {
+    #        cgen::iout "int $name ${args};\n"
+    #    } elseif {[llength $args] == 2} {
+    #        cgen::out "\n"
+    #        fn int $name [lindex $args 0] [lindex $args 1]
+    #    } else {
+    #        cgen::iout "int $name"
+    #    }
+    #}
+
+    proc defer {statement} {
+        upvar defers defers
+        stack::push defers $statement
+    }
+
+    proc block {body} {
+        stack::make defers 
+
+        cgen::out "{\n"
+        cgen::indent
+        uplevel 0 $body
+
+        foreach deferred $defers {
+            eval $deferred
+        }
+
+        cgen::unindent
+        cgen::indentation
+        cgen::out "}\n"
+    }
+
+    proc if {condition body} {
+        cgen::iout "if("
+        cgen::out $condition
+        cgen::out ")"
+        block $body
+    }
+
+    proc return {value} {
+        cgen::iout "return $value;\n"
+    }
+
+    proc printf {str} {
+        cgen::iout "printf(\"$str\");\n"
+    }
 }
 
 # test code
 
-c-include <stdio.h>
-c-include <stdlib.h>
+namespace eval c {
+    include <stdio.h>
+    include <stdlib.h>
 
-c-int sayhello {c-int times} {
-    c-if {times < 0} {
-        c-return 0
+    int sayhello {int times} {
+        if {times < 0} {
+            return 0
+        }
+        printf "hello"
+        cgen::indentation
+        sayhello times - 1
+        return 0
     }
-    printf {"hello"}
-    sayhello {times - 1}
-    c-return 0
-}
 
-c-int main {c-int a, c-int b} {
-    c-int hi = 1
-    printf {"hey\n"}
-    sayhello 5
 
-    c-defer {printf "\"final-hi\\n\""}
+    int main {int argc, char** argv} {
+        int hi = 1
+        printf "hey\\n"
+        cgen::indentation
+        sayhello 5
 
-    c-block {
-        c-defer {printf "\"deferred-hi\\n\""}
-        printf "\"world\""
+        while {0} {
+            printf {hello-false\n}
+        }
+        defer {printf {final-hi\n}}
+
+        cgen::indentation
+        block {
+            defer {printf "deferred-hi\\n"}
+            printf "world"
+        }
     }
 }
-
