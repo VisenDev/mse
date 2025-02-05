@@ -1,24 +1,29 @@
 
 namespace eval cgen {
     set indent-level 0
+    set indent-paused 0
     proc indent {} {
         incr ::cgen::indent-level
     }
-
     proc unindent {} {
         incr ::cgen::indent-level -1
     }
     proc indentation {} {
-        for {set i 0} {$i < ${::cgen::indent-level}} {incr i} {
-            puts -nonewline "    "
+        if {${::cgen::indent-paused} == 0} {
+            for {set i 0} {$i < ${::cgen::indent-level}} {incr i} {
+                puts -nonewline "    "
+            }
         }
     }
     proc out {str} {
+        indentation
         puts -nonewline $str
     }
-    proc iout {str} {
-        indentation
-        out $str
+    proc pause-indent {} {
+        set ::cgen::indent-paused 1
+    }
+    proc unpause-indent {} {
+        set ::cgen::indent-paused 0
     }
 }
 
@@ -67,9 +72,9 @@ namespace eval c {
     } 
 
     proc while {condition body} {
-        cgen::indentation
-        cgen::out "while ($condition)" 
+        cgen::out "while ($condition) {\n" 
         block $body
+        cgen::out "}\n"
     }
 
     proc include {file} {
@@ -79,6 +84,7 @@ namespace eval c {
     proc fn-args {fn-args} {
         set arglist [split ${fn-args} ","]
         set comma 0
+        cgen::pause-indent
         cgen::out "("
         foreach arg $arglist {
             ::if {$comma == 1} {
@@ -88,6 +94,7 @@ namespace eval c {
             eval $arg
         }
         cgen::out ")"
+        cgen::unpause-indent
     }
 
     proc fn {ret name args body} {
@@ -97,7 +104,9 @@ namespace eval c {
         ::if {$body == {}} {
             cgen::out ";\n"
         } else {
+            cgen::out "{\n"
             block $body
+            cgen::out "}\n"
         }
     }
 
@@ -107,7 +116,7 @@ namespace eval c {
                 # initialization operation
                 ::if {[lindex $args 0] == "="} {
 
-                    cgen::iout "T $name ${args};\n"
+                    cgen::out "T $name ${args};\n"
                 
                 # function prototype/definition
                 } elseif {[llength $args] != 0} {
@@ -116,7 +125,7 @@ namespace eval c {
 
                 # parameter declaraction
                 } else {
-                    cgen::iout "T $name"
+                    cgen::out "T $name"
                 }
             }
         }
@@ -137,12 +146,12 @@ namespace eval c {
 
     #proc int {name args} {
     #    ::if {[lindex $args 0] == "="} {
-    #        cgen::iout "int $name ${args};\n"
+    #        cgen::out "int $name ${args};\n"
     #    } elseif {[llength $args] == 2} {
     #        cgen::out "\n"
     #        fn int $name [lindex $args 0] [lindex $args 1]
     #    } else {
-    #        cgen::iout "int $name"
+    #        cgen::out "int $name"
     #    }
     #}
 
@@ -154,7 +163,6 @@ namespace eval c {
     proc block {body} {
         stack::make defers 
 
-        cgen::out "{\n"
         cgen::indent
         uplevel 0 $body
 
@@ -163,23 +171,27 @@ namespace eval c {
         }
 
         cgen::unindent
-        cgen::indentation
-        cgen::out "}\n"
     }
 
     proc if {condition body} {
-        cgen::iout "if("
+
+        cgen::out "if("
+
+        cgen::pause-indent
         cgen::out $condition
-        cgen::out ")"
+        cgen::out ") {\n"
+        cgen::unpause-indent
+
         block $body
+        cgen::out "}\n"
     }
 
     proc return {value} {
-        cgen::iout "return $value;\n"
+        cgen::out "return $value;\n"
     }
 
     proc printf {str} {
-        cgen::iout "printf(\"$str\");\n"
+        cgen::out "printf(\"$str\");\n"
     }
 }
 
@@ -197,7 +209,6 @@ namespace eval c {
             return 0
         }
         printf "hello"
-        cgen::indentation
         sayhello times - 1
         return 0
     }
@@ -206,7 +217,6 @@ namespace eval c {
     int main {int argc, char** argv} {
         int hi = 1
         printf "hey\\n"
-        cgen::indentation
         sayhello 5
         int* myvar = malloc(400)
         defer {free myvar}
@@ -214,12 +224,11 @@ namespace eval c {
         defer {
             while {hi < 10} {
                 printf {hello-false\n}
-                cgen::iout "hi += 1;\n"
+                cgen::out "hi += 1;\n"
             }
         }
         defer {printf {final-hi\n}}
 
-        cgen::indentation
         block {
             defer {printf "deferred-hi\\n"}
             printf "world"
