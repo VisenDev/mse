@@ -2,14 +2,14 @@
 namespace eval cgen {
     set indent-level 0
     proc indent {} {
-        incr cgen::indent-level
+        incr ::cgen::indent-level
     }
 
     proc unindent {} {
-        incr cgen::indent-level -1
+        incr ::cgen::indent-level -1
     }
     proc indentation {} {
-        for {set i 0} {$i < ${cgen::indent-level}} {incr i} {
+        for {set i 0} {$i < ${::cgen::indent-level}} {incr i} {
             puts -nonewline "    "
         }
     }
@@ -94,17 +94,27 @@ namespace eval c {
         uplevel 0 "proc $name {args} {cgen::out \"$name\(\$args\);\\n\"}"
         cgen::out "$ret $name"
         fn-args $args
-        block $body
+        ::if {$body == {}} {
+            cgen::out ";\n"
+        } else {
+            block $body
+        }
     }
 
     proc def-type {typename} {
         set template {
             proc T {name args} {
+                # initialization operation
                 ::if {[lindex $args 0] == "="} {
+
                     cgen::iout "T $name ${args};\n"
-                } elseif {[llength $args] == 2} {
+                
+                # function prototype/definition
+                } elseif {[llength $args] != 0} {
                     cgen::out "\n"
                     fn T $name [lindex $args 0] [lindex $args 1]
+
+                # parameter declaraction
                 } else {
                     cgen::iout "T $name"
                 }
@@ -122,6 +132,7 @@ namespace eval c {
     def-type void 
     def-type float
     def-type long
+    def-type size_t
     def-type short
 
     #proc int {name args} {
@@ -147,7 +158,7 @@ namespace eval c {
         cgen::indent
         uplevel 0 $body
 
-        foreach deferred $defers {
+        foreach deferred [lreverse $defers] {
             eval $deferred
         }
 
@@ -178,6 +189,9 @@ namespace eval c {
     include <stdio.h>
     include <stdlib.h>
 
+    void* malloc {size_t bytes}
+    void free {void* mem}
+
     int sayhello {int times} {
         if {times < 0} {
             return 0
@@ -194,9 +208,14 @@ namespace eval c {
         printf "hey\\n"
         cgen::indentation
         sayhello 5
+        int* myvar = malloc(400)
+        defer {free myvar}
 
-        while {0} {
-            printf {hello-false\n}
+        defer {
+            while {hi < 10} {
+                printf {hello-false\n}
+                cgen::iout "hi += 1;\n"
+            }
         }
         defer {printf {final-hi\n}}
 
