@@ -1,7 +1,8 @@
 
 
 set compiler [dict create \
-    primitives [dict create \ int        [dict create value "int"          size 4 default "0"] \
+    primitives [dict create \
+        int        [dict create value "int"          size 4 default "0"] \
         uint       [dict create value "unsigned int" size 4 default "0"] \
         bool       [dict create value "int"          size 4 default "0"] \
         float      [dict create value "float"        size 4 default "0"] \
