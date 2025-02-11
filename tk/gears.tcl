@@ -53,39 +53,44 @@
 #puts [.max.entry get]
 
 
+package require Tk
 
-
-proc integerEntryHighlighting {name min max} {
-    set num [$name get]
-    if {[string is integer $num] && [expr {$num >= $min && $num <= $max}]} {
-        $name configure -fg black
-    } else {
-        $name configure -fg red 
-    }
-}
+#proc integerEntryHighlighting {name min max} {
+    #set num [$name get]
+    #if {[string is integer $num] && [expr {$num >= $min && $num <= $max}]} {
+    #    $name configure -fg black
+    #} else {
+    #    $name configure -fg red 
+    #}
+#}
 
 proc integerEntry {name label {default 100} {min 0} {max 255}} {
-    frame $name
+    grid [ttk::frame $name -width 400] -sticky w
 
-    label $name.label -text $label
-    entry $name.entry -validate all -validatecommand {regexp {^[-+.0-9]*$} %P}
+    grid [ttk::label $name.label -text $label -width 200] -column 0 -row 0 -padx 5 -sticky w -columnspan 1
+    grid [ \
+        ttk::entry $name.entry -validate all -validatecommand {regexp {^[-+.0-9]*$} %P} -width 200 \
+    ] -column 3 -row 0 -padx 5 -sticky w -columnspan 1
     $name.entry insert 0 $default
-    grid $name.label $name.entry -padx 5 -pady 5
-    bind $name.entry <KeyRelease> "integerEntryHighlighting $name.entry $min $max" 
 
-    grid $name
+    #grid $name.label $name.entry -padx 5 -pady 5
+#    bind $name.entry <KeyRelease> "integerEntryHighlighting $name.entry $min $max" 
 }
 
 proc main {} {
+    ttk::style theme use default
+    grid [ttk::frame .c] -column 0 -row 0 -sticky nwes
+    grid columnconfigure . 0 -weight 1; grid rowconfigure . 0 -weight 1
+
     wm title . "Gear Solver"
 
-    menu .menubar
-    .menubar add command -label Quit -command {exit}
-    . configure -menu .menubar
+    menu .c.menubar
+    .c.menubar add command -label Quit -command {exit}
+    . configure -menu .c.menubar
 
-    integerEntry .max "Max Spokes" 60
-    integerEntry .min "Min Spokes" 20
+    integerEntry .c.max "Max Spokes" 60 8
+    integerEntry .c.min "Min Spokes" 20 8
 }
 
 main
-
+vwait forever
